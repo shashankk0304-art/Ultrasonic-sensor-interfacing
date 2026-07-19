@@ -1,0 +1,149 @@
+module ultrasonic_fsm(
+    input clk, rst,
+    inout sgl,
+    output reg [25:0] distance_count
+);
+ 
+reg oe;   // output-enable: drive sgl during TRIGGER, else release
+reg in;   // kept from your original design; gates when we treat sgl as echo input
+ 
+wire ping_in;      // sensed level of sgl (echo line)
+wire  ping_out;      // level we drive onto sgl when oe=1
+ 
+//FSM STATES:
+localparam IDLE=3'b000,TRIGGER=3'b001,HOLD=3'b010,ECHO=3'b011,WAIT=3'b100;
+ 
+//TRI-STATE DRIVER FOR sgl:
+assign ping_out     = (oe) ? TRIGGER : 1'bz;
+assign ping_in = (in)?ECHO: 1'bz;   // continuous read of the line; only meaningful while oe=0
+ 
+//COUNTERS:
+reg[25:0]trigger_count;//2000
+reg[25:0]hold_count;//78_000
+reg[25:0]echo_count;//30_00_000
+reg[25:0]delay_count;//5cr
+ 
+//STATE REGISTERS:
+reg[2:0]current_state,next_state;
+ 
+always@(posedge clk)
+    begin
+        if(rst)
+            begin
+                current_state<=IDLE;
+                trigger_count<=0;
+                hold_count<=0;
+                echo_count<=0;
+                delay_count<=0;
+                distance_count<=0;
+            end
+        else
+            begin
+                current_state<=next_state;
+                case(current_state)
+                    IDLE:begin
+                        trigger_count<=0;
+                        hold_count<=0;
+                        echo_count<=0;
+                        delay_count<=0;
+                    end
+ 
+                    TRIGGER:
+                        begin
+                            trigger_count<=trigger_count+1;
+                        end
+ 
+                    HOLD:begin
+                        hold_count<=hold_count+1;
+                    end
+ 
+                    ECHO:begin
+                        if(ping_in==1'b1)
+                            begin
+                                echo_count<=echo_count+1;
+                            end
+                        else
+                            begin
+                                // echo just ended: latch the measurement, then
+                                // immediately drop echo_count back to 0
+                                distance_count<=echo_count;
+                                echo_count<=0;
+                            end
+                    end
+ 
+                    WAIT:begin
+                        delay_count<=delay_count+1;
+                    end
+                endcase
+            end
+    end
+ 
+always@(*)
+    begin
+        next_state=current_state;
+        oe=1'b0;
+        in=1'b0;
+ 
+        case(current_state)
+        IDLE:begin
+            next_state=TRIGGER;
+        end
+ 
+        TRIGGER:begin
+            oe=1'b1;
+            in=1'b0;
+            if(trigger_count<2000)
+                begin
+                    next_state=TRIGGER;
+                end
+            else
+                begin
+                    next_state=HOLD;
+                end
+        end
+ 
+        HOLD:begin
+            oe=1'b0;
+            in=1'b0;
+            if(ping_in==1'b1)
+                begin
+                    next_state=ECHO;
+                end
+            else if(hold_count>78_000)
+                begin
+                    next_state=WAIT;
+                end
+            else
+                begin
+                    next_state=HOLD;
+                end
+        end
+ 
+        ECHO:begin
+            oe=1'b0;
+            in=1'b1;
+            if(ping_in==1'b1)
+                begin
+                    next_state=ECHO;
+                end
+            else
+                begin
+                    next_state=WAIT;
+                end
+        end
+ 
+        WAIT:begin
+            oe=1'b0;
+            in=1'b0;
+            if(delay_count<5000000)
+                begin
+                    next_state=WAIT;
+                end
+            else
+                begin
+                    next_state=IDLE;
+                end
+        end
+            endcase
+    end
+endmodule
