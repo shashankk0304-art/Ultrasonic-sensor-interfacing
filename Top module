@@ -1,0 +1,21 @@
+module xyz_top(
+    input clk, rst,
+    inout sgl,
+    output [3:0] led
+);
+ 
+wire [25:0] distance_count;
+ 
+ultrasonic_fsm uut1 (
+    .clk(clk),
+    .rst(rst),
+    .sgl(sgl),
+    .distance_count(distance_count)
+);
+ 
+distance_comparator uut2 (
+    .distance_count(distance_count),
+    .led(led)
+);
+ 
+endmodule
