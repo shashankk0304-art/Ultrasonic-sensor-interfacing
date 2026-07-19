@@ -1,0 +1,20 @@
+module distance_comparator(
+    input      [25:0] distance_count,
+    output reg [3:0]  led
+);
+ 
+always@(*)
+    begin
+        if (distance_count <= 20000)
+            led = 4'b0000;              // < ~2cm
+        else if (distance_count <= 50000)
+            led = 4'b0001;
+        else if (distance_count <= 75000)
+            led = 4'b0011;
+        else if (distance_count <= 100000)
+            led = 4'b0111;
+        else
+            led = 4'b1111;
+    end
+ 
+endmodule
